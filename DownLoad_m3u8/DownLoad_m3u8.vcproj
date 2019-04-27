@@ -171,7 +171,15 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
-				RelativePath=".\List.h"
+				RelativePath=".\DecryptBuf.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\DownLoadM3U8.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\Log.cpp"
 				>
 			</File>
 			<File
@@ -180,10 +188,6 @@
 			</File>
 			<File
 				RelativePath=".\ReadOneLine.cpp"
-				>
-			</File>
-			<File
-				RelativePath=".\ReadOneLine.h"
 				>
 			</File>
 			<Filter
@@ -244,6 +248,26 @@
 			Filter="h;hpp;hxx;hm;inl;inc;xsd"
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
+			<File
+				RelativePath=".\DecryptBuf.h"
+				>
+			</File>
+			<File
+				RelativePath=".\DownLoadM3U8.h"
+				>
+			</File>
+			<File
+				RelativePath=".\List.h"
+				>
+			</File>
+			<File
+				RelativePath=".\Log.h"
+				>
+			</File>
+			<File
+				RelativePath=".\ReadOneLine.h"
+				>
+			</File>
 		</Filter>
 		<Filter
 			Name="资源文件"
