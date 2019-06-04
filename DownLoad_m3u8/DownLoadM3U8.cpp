@@ -23,6 +23,8 @@ enum ENCRYPT_TYPE{
 typedef struct _DownTsList{
     LIST_ENTRY next;
     DWORD nId;          // 在视频文件中的id序号 
+    DWORD nDecodeErrCount;  // 解密失败次数，超过3次就不解密 
+    BOOL  bEncrypt;     // 判断是否加密 
     PBYTE pThisFileBuf; // 下载该视频片段的内存 
     DWORD dwFileSize;   // 下载下来视频片段字节数 
     char* chUrl;        // 视频片段Url 
@@ -150,14 +152,18 @@ static DWORD WINAPI DownTsThread(LPVOID lParam)
                 do 
                 {
                     // 判断加密方式并解密 
-                    if (EncryptType == ENCRYPT_AES128)
+                    if (pDwonOneList->bEncrypt && pDwonOneList->nDecodeErrCount <= 3)
                     {
-                        BYTE iv = 128;
-                        if( !AESDecrypt(lpM3U8Key, &iv, pDwonOneList->pThisFileBuf, pDwonOneList->dwFileSize) )
+                        if (EncryptType == ENCRYPT_AES128)
                         {
-                            logger("AES解密失败： %s\n", pDwonOneList->chUrl);
-                            bDownSuccess = FALSE;
-                            break;
+                            BYTE iv = 128;
+                            if( !AESDecrypt(lpM3U8Key, &iv, pDwonOneList->pThisFileBuf, pDwonOneList->dwFileSize) )
+                            {
+                                pDwonOneList->nDecodeErrCount++;
+                                logger("AES解密失败： %s\n", pDwonOneList->chUrl);
+                                bDownSuccess = FALSE;
+                                break;
+                            }
                         }
                     }
 
@@ -226,6 +232,7 @@ static const char* GetFileUrl(char* lpSaveAddr, LPCSTR host_url, char* sub_url)
 static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Url)
 {
     // 下载文件 
+    BOOL bEncryptFlags = FALSE;
     DWORD dwM3u8Size = 0;
     LPBYTE lpM3u8File = GetHttpDataA(lpM3u8Url, &dwM3u8Size);
     if ( lpM3u8File )
@@ -268,6 +275,7 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Url)
                         if (lpM3u8File != NULL)
                         {
                             lpM3U8Key = lpM3u8File;
+                            bEncryptFlags = TRUE;
                         }
                     }
                 }
@@ -287,6 +295,8 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Url)
                 // 加入列表进行下载 
                 PDownTsList plist = (PDownTsList)AllocMemory(sizeof(DownTsList));
                 plist->nId = dwCountId++;
+                plist->nDecodeErrCount = 0;
+                plist->bEncrypt = bEncryptFlags;
                 plist->chUrl = (char*)AllocMemory(strlen(lpNewUrl)+1);
                 strcpy(plist->chUrl, lpNewUrl);
                 TsNeedDownListLock.lock();
