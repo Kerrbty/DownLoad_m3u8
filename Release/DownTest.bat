@@ -11,5 +11,5 @@ rem DownLoad_m3u8.exe /U "https://11.fahai309.club/20180819/202F250FE7/index.m3u
 rem DownLoad_m3u8.exe /U "https://11.fahai309.club/20180819/578C312122/index.m3u8" /F "学生服美女用香蕉插尿了.Ts"
 rem 测试地址二 
 rem DownLoad_m3u8.exe /U "http://vod.ijntv.cn/2016/1477/6417/1115/147764171115.ssm/147764171115.m3u8" /F "Safe.Ts"   
-DownLoad_m3u8.exe /U "http://cdn.luya9.com/ppvod/CD809E6D5967ADC7A58D322A6FA8292D.m3u8" /F "美女主播金泰妍I0503一多自慰大秀第三弹.ts"
+DownLoad_m3u8.exe /Skip 0-1 /U "http://cdn2.luya9.com/ppvod/67AF83BC271FBBF90957C2F748C7B874.m3u8" /F "女友的漂亮小表妹顺利约到酒店啪啪.ts"
 pause

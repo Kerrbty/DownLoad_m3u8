@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <Shlwapi.h>
+#include <assert.h>
 #include "DownLoadM3U8.h"
 
 static LPCSTR GetSaveName()
@@ -17,12 +18,30 @@ static LPCSTR GetSaveName()
     return lpFileName;
 }
 
+static void GetSkip(LPSTR lpSkipStr, DWORD *nSkipStart, DWORD *nSkipCount)
+{
+    assert(lpSkipStr);
+    assert(nSkipStart);
+    assert(nSkipCount);
+    char* pNextStr = NULL;
+    *nSkipStart = strtoul(lpSkipStr, &pNextStr, 10);
+    if (*pNextStr == '-')
+    {
+        *nSkipCount = strtoul(pNextStr+1, NULL, 10);
+    }
+    else
+    {
+        *nSkipCount = 1;
+    }
+}
+
 static void usage(const char* selfname)
 {
     const char* lpname = PathFindFileNameA(selfname);
     printf("M3U8下载工具 -- v1.0.0\n\n");
     printf("%s /U M3U8 /F SaveFile  \n", lpname);
     printf("  /U  M3U8      M3U8文件的URL\n");
+    printf("  /Skip StartId-nCount   略过从某一个帧开始的nCount帧\n");
     printf("  /F SaveFile   保持下载Ts文件名\n\n");
 }
 
@@ -36,18 +55,25 @@ int main(int argc, char* argv[], char* env[])
     }
     LPCSTR lpM3u8Url = NULL;
     LPCSTR lpSaveFile = NULL;
+    DWORD lpSkipStart = 0;
+    DWORD lpSkipCount = 0;
 
     for (int i=1; i<argc-1; i++)
     {
-        if ( memicmp(argv[i], "/U", 2 ) == 0 ||
-            memicmp(argv[i], "-U", 2 ) == 0 )
+        if ( memicmp(argv[i], "/U", 3 ) == 0 ||
+            memicmp(argv[i], "-U", 3 ) == 0 )
         {
             lpM3u8Url = argv[++i];
         }
-        else if (memicmp(argv[i], "/F", 2 ) == 0 ||
-            memicmp(argv[i], "-F", 2 ) == 0 )
+        else if (memicmp(argv[i], "/F", 3 ) == 0 ||
+            memicmp(argv[i], "-F", 3 ) == 0 )
         {
             lpSaveFile = argv[++i];
+        }
+        else if (memicmp(argv[i], "/Skip", 6) == 0 ||
+            memicmp(argv[i], "-Skip", 6) == 0 )
+        {
+            GetSkip(argv[++i], &lpSkipStart, &lpSkipCount);
         }
     }
     if (lpM3u8Url == NULL)
@@ -59,7 +85,7 @@ int main(int argc, char* argv[], char* env[])
     {
         lpSaveFile = GetSaveName();
     }
-    DownM3u8(lpM3u8Url, lpSaveFile);
+    DownM3u8(lpM3u8Url, lpSaveFile, lpSkipStart, lpSkipCount);
 #else
     DownM3u8("http://cdn.luya9.com/ppvod/512DEC0E4B55C857E1FFE628B6CD0401.m3u8", "F:\\av.ts");
 #endif

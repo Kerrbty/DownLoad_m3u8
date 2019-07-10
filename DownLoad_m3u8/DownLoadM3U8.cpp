@@ -9,9 +9,6 @@
 #include <shlwapi.h>
 #pragma comment(lib, "shlwapi.lib")
 
-
-
-
 #define URL_LENTH   1024
 #define MAX_DWONLOAD_THREAD  18
 
@@ -30,21 +27,23 @@ typedef struct _DownTsList{
     char* chUrl;        // 视频片段Url 
 }DownTsList, *PDownTsList; 
 
-HANDLE hSaveFile = INVALID_HANDLE_VALUE;
-volatile DWORD dwCountId = 0;
+static HANDLE hSaveFile = INVALID_HANDLE_VALUE;
+volatile DWORD global_dwCountId = 0;
 
 // 下载列表 
-DownTsList TsNeedDownList;
-CLock TsNeedDownListLock;
+static DownTsList TsNeedDownList;
+static CLock TsNeedDownListLock;
 
 // 保持文件列表 
-DownTsList TsNeedSaveList;
-CLock TsNeedSaveListLock;
+static DownTsList TsNeedSaveList;
+static CLock TsNeedSaveListLock;
 
-ENCRYPT_TYPE EncryptType = NOT_ENCRYPT;
-PBYTE lpM3U8Key = NULL;
+static ENCRYPT_TYPE EncryptType = NOT_ENCRYPT;
+static PBYTE lpM3U8Key = NULL;
 
-
+// 需要略过的几个帧 
+static DWORD global_skipStart = 0;
+static DWORD global_skipCount = 0;
 
 static DWORD WINAPI SaveTsThread(LPVOID lParam)
 {
@@ -87,9 +86,13 @@ static DWORD WINAPI SaveTsThread(LPVOID lParam)
             }
 #pragma endregion Exit_FLags
 
-            printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b下载进度: %u/%u", dwSaveCurrentId, dwCountId-MAX_DWONLOAD_THREAD);
+            printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b下载进度: %u/%u\t", dwSaveCurrentId+1, global_dwCountId>MAX_DWONLOAD_THREAD?global_dwCountId-MAX_DWONLOAD_THREAD:global_dwCountId);
             logger("Save Id: %u\n", dwSaveCurrentId);
-            WriteFile(hSaveFile, pInserList->pThisFileBuf, pInserList->dwFileSize, &dwBytes, NULL);
+            if (pInserList->pThisFileBuf != NULL && pInserList->dwFileSize>0)
+            {
+                WriteFile(hSaveFile, pInserList->pThisFileBuf, pInserList->dwFileSize, &dwBytes, NULL);
+            }
+            
             FreeMemory(pInserList->pThisFileBuf);
             FreeMemory(pInserList->chUrl);
             FreeMemory(pInserList);
@@ -120,11 +123,12 @@ static DWORD WINAPI DownTsThread(LPVOID lParam)
         }
         else
         {
+            BOOL bDownSuccess = FALSE;
+
             PLIST_ENTRY pNowList = _RemoveHeadList(&TsNeedDownList.next);
             TsNeedDownListLock.unlock();
 
             PDownTsList pDwonOneList = CONTAINING_RECORD(pNowList, DownTsList, next);
-
             if (strcmp(pDwonOneList->chUrl, "EndBlock") == 0)
             {
                 TsNeedSaveListLock.lock();
@@ -144,46 +148,62 @@ static DWORD WINAPI DownTsThread(LPVOID lParam)
                 TsNeedSaveListLock.unlock();
                 break;
             }
-
-            BOOL bDownSuccess = FALSE;
-            pDwonOneList->pThisFileBuf = GetHttpDataA(pDwonOneList->chUrl, &pDwonOneList->dwFileSize);
-            if (pDwonOneList->pThisFileBuf != NULL && pDwonOneList->dwFileSize != 0)
+            else if (global_skipCount > 0)
             {
-                do 
+                if (pDwonOneList->nId>=global_skipStart && pDwonOneList->nId<global_skipStart+global_skipCount)
                 {
-                    // 判断加密方式并解密 
-                    if (pDwonOneList->bEncrypt && pDwonOneList->nDecodeErrCount <= 3)
+                    pDwonOneList->pThisFileBuf = NULL;
+                    pDwonOneList->dwFileSize = 0;
+                    logger("Skip Download Id: %u\n", pDwonOneList->nId);
+                    bDownSuccess = TRUE;
+                }
+            }
+            // 不略过下载的，需要正常下载 
+            if(!bDownSuccess)
+            {
+                pDwonOneList->pThisFileBuf = GetHttpDataA(pDwonOneList->chUrl, &pDwonOneList->dwFileSize);
+                if (pDwonOneList->pThisFileBuf != NULL && pDwonOneList->dwFileSize != 0)
+                {
+                    bDownSuccess = TRUE;
+                    do 
                     {
-                        if (EncryptType == ENCRYPT_AES128)
+                        // 判断加密方式并解密 
+                        if (pDwonOneList->bEncrypt && pDwonOneList->nDecodeErrCount <= 3)
                         {
-                            BYTE iv = 128;
-                            if( !AESDecrypt(lpM3U8Key, &iv, pDwonOneList->pThisFileBuf, pDwonOneList->dwFileSize) )
+                            if (EncryptType == ENCRYPT_AES128)
                             {
-                                pDwonOneList->nDecodeErrCount++;
-                                logger("AES解密失败： %s\n", pDwonOneList->chUrl);
-                                bDownSuccess = FALSE;
-                                break;
+                                BYTE iv = 128;
+                                if( !AESDecrypt(lpM3U8Key, &iv, pDwonOneList->pThisFileBuf, pDwonOneList->dwFileSize) )
+                                {
+                                    pDwonOneList->nDecodeErrCount++;
+                                    logger("AES解密失败： %s\n", pDwonOneList->chUrl);
+                                    bDownSuccess = FALSE;
+                                    break;
+                                }
                             }
                         }
-                    }
+                    } while (FALSE);
+                }
+            }
 
-                    logger("Download Id: %u\n", pDwonOneList->nId);
-                    TsNeedSaveListLock.lock();
-                    // 如果是空列表，加入首部尾部是一样的 
-                    // 如果不为空，需要判断先后顺序，按序插入 
-                    PLIST_ENTRY Currentlink = TsNeedSaveList.next.Flink; // 假设这个是比 PDownOneList->nId 大的数据 
-                    for ( ;Currentlink != &TsNeedSaveList.next; Currentlink = Currentlink->Flink )
+            // 下载成功，放入保存队列 
+            if (bDownSuccess)
+            {
+                logger("Download Id: %u\n", pDwonOneList->nId);
+                TsNeedSaveListLock.lock();
+                // 如果是空列表，加入首部尾部是一样的 
+                // 如果不为空，需要判断先后顺序，按序插入 
+                PLIST_ENTRY Currentlink = TsNeedSaveList.next.Flink; // 假设这个是比 PDownOneList->nId 大的数据 
+                for ( ;Currentlink != &TsNeedSaveList.next; Currentlink = Currentlink->Flink )
+                {
+                    PDownTsList pInserList = CONTAINING_RECORD(Currentlink, DownTsList, next);
+                    if (pInserList->nId > pDwonOneList->nId)
                     {
-                        PDownTsList pInserList = CONTAINING_RECORD(Currentlink, DownTsList, next);
-                        if (pInserList->nId > pDwonOneList->nId)
-                        {
-                            break;
-                        }
+                        break;
                     }
-                    _InsertTailList(Currentlink, &pDwonOneList->next);
-                    TsNeedSaveListLock.unlock();
-                    bDownSuccess = TRUE;
-                } while (FALSE);
+                }
+                _InsertTailList(Currentlink, &pDwonOneList->next);
+                TsNeedSaveListLock.unlock();
             }
             
             if (!bDownSuccess)
@@ -294,7 +314,7 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Url)
 
                 // 加入列表进行下载 
                 PDownTsList plist = (PDownTsList)AllocMemory(sizeof(DownTsList));
-                plist->nId = dwCountId++;
+                plist->nId = global_dwCountId++;
                 plist->nDecodeErrCount = 0;
                 plist->bEncrypt = bEncryptFlags;
                 plist->chUrl = (char*)AllocMemory(strlen(lpNewUrl)+1);
@@ -316,19 +336,22 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Url)
 }
 
 
-BOOL DownM3u8(LPCSTR lpM3u8Url, LPCSTR lpSaveFile)
+BOOL DownM3u8(LPCSTR lpM3u8Url, LPCSTR lpSaveFile, DWORD dwSkipStart, DWORD dwSkipCount)
 {
     if (lpM3u8Url==NULL && lpSaveFile==NULL )
     {
         return FALSE;
     }
 
+    global_skipStart = dwSkipStart;
+    global_skipCount = dwSkipCount;
+
     // 初始化列表 
     _InitializeListHead(&TsNeedDownList.next);
     _InitializeListHead(&TsNeedSaveList.next);
     TsNeedDownList.nId = -1;
     TsNeedSaveList.nId = -1;
-    dwCountId = 0;
+    global_dwCountId = 0;
 
     hSaveFile = FileOpenA(lpSaveFile, GENERIC_WRITE, FILE_SHARE_READ, CREATE_ALWAYS);
     if (hSaveFile != INVALID_HANDLE_VALUE)
@@ -349,7 +372,7 @@ BOOL DownM3u8(LPCSTR lpM3u8Url, LPCSTR lpSaveFile)
         {
             // 最后加入 MAX_DWONLOAD_THREAD 个数据块，结束标志,每个线程消耗一个 
             PDownTsList plist = (PDownTsList)AllocMemory(sizeof(DownTsList));
-            plist->nId = dwCountId++;
+            plist->nId = global_dwCountId++;
             plist->chUrl = (char*)AllocMemory(MAX_PATH);
             strcpy(plist->chUrl, "EndBlock");
             TsNeedDownListLock.lock();
