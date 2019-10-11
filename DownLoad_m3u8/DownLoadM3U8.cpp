@@ -303,12 +303,12 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Url)
                 continue; // 注释的行 
             }
 
-            LPCSTR lpFileExt = PathFindExtensionA(lpOneAddr);
+            LPCSTR lpFileExt = strchr(lpOneAddr, '.');
             if (stricmp(lpFileExt, ".m3u8") == 0) // m3u8 
             {
                 AnalyzeM3u8File(GetFileUrl(lpDownAddress, lpM3u8Url, lpOneAddr+firstch));
             }
-            else if ( StrStrIA(lpFileExt, ".ts") != NULL )  // 知乎里面ts文件带 auth_key= 的
+            else if ( StrStrIA(lpFileExt, ".ts") != NULL || StrStrIA(lpFileExt, ".mp4") != NULL )  // 知乎里面ts文件带 auth_key= 的
             {
                 const char* lpNewUrl = GetFileUrl(lpDownAddress, lpM3u8Url, lpOneAddr+firstch);
 
