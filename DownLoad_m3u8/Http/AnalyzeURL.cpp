@@ -8,12 +8,34 @@
 // WORD m_port;
 // LPWSTR m_server_name; 
 // LPWSTR m_object_name;
-
 CURL::CURL(LPCSTR szurl)
 {
-    PWSTR  pElementText;
-    int    iTextLen;
+    m_port = 80;
+    m_scheme = INTERNET_SCHEME_HTTP;
+    m_server_name = NULL; 
+    m_object_name = NULL;
+    SetUrlA(szurl);
+}
 
+CURL::CURL(LPCWSTR szurl)
+{
+    SetUrlW(szurl);
+}
+
+BOOL CURL::SetUrlA(LPCSTR szurl)
+{
+    BOOL retval = FALSE;
+    if (szurl != NULL)
+    {
+        LPWSTR szwUrl = MulToWide(szurl);
+        retval = SetUrlW(szwUrl);
+        FreeMemory(szwUrl);
+    }
+    return retval;
+}
+
+BOOL CURL::SetUrlW(LPCWSTR szurl)
+{
     m_port = 80;
     m_scheme = INTERNET_SCHEME_HTTP;
     m_server_name = NULL; 
@@ -21,26 +43,29 @@ CURL::CURL(LPCSTR szurl)
 
     if (szurl != NULL)
     {
-        iTextLen = MultiByteToWideChar( CP_ACP,
-            0,
-            szurl,
-            -1,
-            NULL,
-            0 );
+        DWORD dwurllen = wcslen(szurl);
+        LPWSTR lpCopyUrl = (LPWSTR)AllocMemory((dwurllen+1)*sizeof(WCHAR));
+        wcscpy(lpCopyUrl, szurl);
 
-        pElementText = 
-            (PWSTR)AllocMemory((iTextLen+1)*sizeof(WCHAR));
+        ClenData();
+        AnalyzeUrl(lpCopyUrl);
 
-        MultiByteToWideChar( CP_ACP,
-            0,
-            szurl,
-            -1,
-            pElementText,
-            iTextLen );
+        FreeMemory(lpCopyUrl);
+        return TRUE;
+    }
+    return FALSE;
+}
 
-        AnalyzeUrl(pElementText);
+void CURL::ClenData()
+{
+    if (m_server_name != NULL)
+    {
+        FreeMemory(m_server_name);
+    }
 
-        FreeMemory(pElementText);
+    if (m_object_name != NULL)
+    {
+        FreeMemory(m_object_name);
     }
 }
 
@@ -85,8 +110,16 @@ VOID CURL::AnalyzeUrl(LPWSTR szurl)
         dwHostNameLen = wcslen(hostname);
     }
 
-    m_server_name = (LPWSTR)AllocMemory((dwHostNameLen+1)*sizeof(WCHAR));
+    m_server_name = (LPWSTR)AllocMemory((dwHostNameLen+4)*sizeof(WCHAR));
     memcpy(m_server_name, hostname, dwHostNameLen*sizeof(WCHAR));
+
+    // URL with port ? 
+    LPWSTR objport = wcschr(m_server_name, L':');
+    if (objport != NULL)
+    {
+        m_port = _wtol(objport+1);
+        *objport = L'\0';
+    }
 
     if (objname != NULL)
     {
@@ -97,25 +130,6 @@ VOID CURL::AnalyzeUrl(LPWSTR szurl)
             m_object_name = (LPWSTR)AllocMemory((dwObjLen+1)*sizeof(WCHAR));
             memcpy(m_object_name, objname, dwObjLen*sizeof(WCHAR));
         }
-    }
-}
-
-CURL::CURL(LPCWSTR szurl)
-{
-    m_port = 80;
-    m_scheme = INTERNET_SCHEME_HTTP;
-    m_server_name = NULL; 
-    m_object_name = NULL;
-
-    if (szurl != NULL)
-    {
-        DWORD dwurllen = wcslen(szurl);
-        LPWSTR lpCopyUrl = (LPWSTR)AllocMemory((dwurllen+1)*sizeof(WCHAR));
-        wcscpy(lpCopyUrl, szurl);
-
-        AnalyzeUrl(lpCopyUrl);
-
-        FreeMemory(lpCopyUrl);
     }
 }
 
@@ -141,16 +155,10 @@ LPCWSTR CURL::GetObjectName()
 
 CURL::~CURL()
 {
-    if (m_server_name != NULL)
-    {
-        FreeMemory(m_server_name);
-    }
-
-    if (m_object_name != NULL)
-    {
-        FreeMemory(m_object_name);
-    }
+    ClenData();
 }
+
+
 
 //////////////////////////////////////////////////////////////////////////
 //
@@ -158,9 +166,9 @@ CURL::~CURL()
 const char ChangeChar[] = {'&', '+', '%', ' ', '?', '#', '=', '/', ':', '\\', '.'};
 
 // ±àÂëurl 
-BOOL WINAPI EncodeURLA(const char* szUrl, char* szDecodeUrl, DWORD dwbuflen)
+BOOL WINAPI EncodeURLA(const char* szUrl, char* szEncodeUrl, DWORD dwbuflen)
 {
-    if (szUrl == NULL || szDecodeUrl == NULL || dwbuflen == 0)
+    if (szUrl == NULL || szEncodeUrl == NULL || dwbuflen == 0)
     {
         return FALSE;
     }
@@ -183,13 +191,13 @@ BOOL WINAPI EncodeURLA(const char* szUrl, char* szDecodeUrl, DWORD dwbuflen)
         {
             ANSIToUTF8(szCopyUrl, allocbuf);
         }
-        char* po = szCopyUrl;
+        unsigned char* po = (unsigned char*)szCopyUrl;
         for (int i=0; i<dwbuflen-4;)
         {
             int k = 0;
             if (*po >= 0x80)
             {
-                sprintf(szDecodeUrl+i, "%%%02X", *po);
+                sprintf(szEncodeUrl+i, "%%%02X", *po);
                 i += 3;
             }
             else 
@@ -198,14 +206,14 @@ BOOL WINAPI EncodeURLA(const char* szUrl, char* szDecodeUrl, DWORD dwbuflen)
                 {
                     if (*po == ChangeChar[k])
                     {
-                        sprintf(szDecodeUrl+i, "%%%02X", *po);
+                        sprintf(szEncodeUrl+i, "%%%02X", *po);
                         i += 3;
                         break;
                     }
                 }
                 if (k == sizeof(ChangeChar)/sizeof(ChangeChar[0]))
                 {
-                    szDecodeUrl[i] = *po;
+                    szEncodeUrl[i] = *po;
                     i++;
                 }
             }

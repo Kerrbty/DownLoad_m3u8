@@ -8,8 +8,12 @@ extern "C" {
 class CURL
 {
 public:
+    CURL(){};
     CURL(LPCSTR szurl);
     CURL(LPCWSTR szurl);
+
+    BOOL SetUrlA(LPCSTR szurl);
+    BOOL SetUrlW(LPCWSTR szurl);
 
     WORD GetPort();
     LPCWSTR GetServerName();
@@ -19,6 +23,7 @@ public:
     ~CURL();
 protected:
     VOID AnalyzeUrl(LPWSTR);
+    void ClenData();
 private:
     WORD m_port;
     int  m_scheme;
@@ -29,20 +34,7 @@ private:
 
 BOOL WINAPI DecodeURLA(const char* szUrl, char* szDecodeUrl, DWORD dwbuflen); // ½âÂëurl 
 
-BOOL WINAPI EncodeURLA(const char* szUrl, char* szDecodeUrl, DWORD dwbuflen); // ±àÂëurl 
-
-
-
-
-
-
-
-
-
-
-
-
-
+BOOL WINAPI EncodeURLA(const char* szUrl, char* szEncodeUrl, DWORD dwbuflen); // ±àÂëurl 
 
 
 
