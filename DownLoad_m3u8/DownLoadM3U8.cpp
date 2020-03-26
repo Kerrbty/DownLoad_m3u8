@@ -49,6 +49,7 @@ static DWORD WINAPI SaveTsThread(LPVOID lParam)
 {
     DWORD dwBytes = 0;
     DWORD dwSaveCurrentId = 0;
+    TsNeedSaveList.dwFileSize = 0;
     Sleep(1000);
     while(TRUE)
     {
@@ -91,6 +92,7 @@ static DWORD WINAPI SaveTsThread(LPVOID lParam)
             if (pInserList->pThisFileBuf != NULL && pInserList->dwFileSize>0)
             {
                 WriteFile(hSaveFile, pInserList->pThisFileBuf, pInserList->dwFileSize, &dwBytes, NULL);
+                TsNeedSaveList.dwFileSize += pInserList->dwFileSize;
             }
             
             FreeMemory(pInserList->pThisFileBuf);
@@ -364,6 +366,7 @@ BOOL DownM3u8(LPCSTR lpM3u8Url, LPCSTR lpSaveFile, DWORD dwSkipStart, DWORD dwSk
         }
         HANDLE hSaveAllFile = CreateThread(NULL, 0, SaveTsThread, NULL, 0, NULL);
 
+        DWORD dwStartTime = GetTickCount();
         printf("正在初始化...");
         AnalyzeM3u8File(lpM3u8Url);  // 分析M3U8文件  
 
@@ -395,6 +398,41 @@ BOOL DownM3u8(LPCSTR lpM3u8Url, LPCSTR lpSaveFile, DWORD dwSkipStart, DWORD dwSk
         WaitForSingleObject(hSaveAllFile, INFINITE);
         DeleteHandle(hSaveAllFile);
         DeleteHandle(hSaveFile);
+
+        DWORD dwEndTime = GetTickCount();
+        DWORD dwMilliSeconds = dwEndTime - dwStartTime;
+        DWORD dwSeconds = dwMilliSeconds/1000;
+        dwMilliSeconds = dwMilliSeconds%1000;
+
+        float dwDownSpeed = 0;
+        if (dwSeconds)
+        {
+            dwDownSpeed = ((float)TsNeedSaveList.dwFileSize)/dwSeconds;
+        }
+
+        DWORD dwMinutes = dwSeconds/60;
+        dwSeconds = dwSeconds%60;
+        DWORD dwHours = dwMinutes/60;
+        dwMinutes = dwMinutes%60;
+
+        printf("耗时: ");
+        if (dwHours != 0)
+        {
+            printf("%u小时 ", dwHours);
+        }
+        if (dwHours != 0 || dwMinutes != 0)
+        {
+            printf("%u分钟 ", dwMinutes);
+        }
+        printf("%u秒 %u, ", dwSeconds, dwMilliSeconds);
+
+        // 下载平局速度 TsNeedSaveList.dwFileSize 
+        int ich = 0;
+        for (ich=0; ich<4 && dwDownSpeed>1024.0; ich++)
+        {
+            dwDownSpeed /= 1024.0;
+        }
+        printf("平均下载速度: %0.2f%cB/S\n", dwDownSpeed, " KMGT"[ich]);
         return TRUE;
     }
     return FALSE;
