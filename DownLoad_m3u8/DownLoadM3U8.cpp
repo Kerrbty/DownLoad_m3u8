@@ -251,12 +251,29 @@ static const char* GetFileUrl(char* lpSaveAddr, LPCSTR host_url, char* sub_url)
 }
 
 
-static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Url)
+static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Uri, BOOL isURL = TRUE)
 {
     // 下载文件 
     BOOL bEncryptFlags = FALSE;
     DWORD dwM3u8Size = 0;
-    LPBYTE lpM3u8File = GetHttpDataA(lpM3u8Url, &dwM3u8Size);
+    LPBYTE lpM3u8File = NULL;
+    if (isURL)
+    {
+        lpM3u8File = GetHttpDataA(lpM3u8Uri, &dwM3u8Size);
+    }
+    else
+    {
+        DWORD dwBytes = 0;
+        HANDLE hFile = FileOpenA(lpM3u8Uri, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING);
+        if (hFile != INVALID_HANDLE_VALUE)
+        {
+            dwM3u8Size = GetFileSize(hFile, NULL);
+            lpM3u8File = (LPBYTE)AllocMemory(dwM3u8Size+1);
+            SetFilePointer(hFile, 0, NULL, FILE_BEGIN);
+            ReadFile(hFile, lpM3u8File, dwM3u8Size, &dwBytes, NULL);
+            DeleteHandle(hFile);
+        }
+    }
     if ( lpM3u8File )
     {
         DWORD dwUrlLen = 0;
@@ -286,12 +303,17 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Url)
                         {
                             lpKeyURI++;
                         }
-                        int len = strlen(lpKeyURI);
-                        if (len >0 && lpKeyURI[len-1] == '\"')
+                        char* lpEndURI = StrStrIA(lpKeyURI, "\"");
+                        if (lpEndURI != NULL)
                         {
-                            lpKeyURI[len-1] = '\0';
+                            *lpEndURI++ = '\0';
                         }
-                        const char* lpNewUrl = GetFileUrl(lpDownAddress, lpM3u8Url, lpKeyURI);
+//                         int len = strlen(lpKeyURI);
+//                         if (len >0 && lpKeyURI[len-1] == '\"')
+//                         {
+//                             lpKeyURI[len-1] = '\0';
+//                         }
+                        const char* lpNewUrl = GetFileUrl(lpDownAddress, lpM3u8Uri, lpKeyURI);
 
                         LPBYTE lpM3u8File = GetHttpDataA(lpNewUrl, &dwM3u8Size);
                         if (lpM3u8File != NULL)
@@ -308,11 +330,11 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Url)
             LPCSTR lpFileExt = strchr(lpOneAddr, '.');
             if (stricmp(lpFileExt, ".m3u8") == 0) // m3u8 
             {
-                AnalyzeM3u8File(GetFileUrl(lpDownAddress, lpM3u8Url, lpOneAddr+firstch));
+                AnalyzeM3u8File(GetFileUrl(lpDownAddress, lpM3u8Uri, lpOneAddr+firstch), TRUE);
             }
             else if ( StrStrIA(lpFileExt, ".ts") != NULL || StrStrIA(lpFileExt, ".mp4") != NULL )  // 知乎里面ts文件带 auth_key= 的
             {
-                const char* lpNewUrl = GetFileUrl(lpDownAddress, lpM3u8Url, lpOneAddr+firstch);
+                const char* lpNewUrl = GetFileUrl(lpDownAddress, lpM3u8Uri, lpOneAddr+firstch);
 
                 // 加入列表进行下载 
                 PDownTsList plist = (PDownTsList)AllocMemory(sizeof(DownTsList));
@@ -338,7 +360,7 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Url)
 }
 
 
-BOOL DownM3u8(LPCSTR lpM3u8Url, LPCSTR lpSaveFile, DWORD dwSkipStart, DWORD dwSkipCount)
+BOOL DownM3u8(LPCSTR lpM3u8Url, BOOL isFromHttp, LPCSTR lpSaveFile, DWORD dwSkipStart, DWORD dwSkipCount)
 {
     if (lpM3u8Url==NULL && lpSaveFile==NULL )
     {
@@ -368,7 +390,7 @@ BOOL DownM3u8(LPCSTR lpM3u8Url, LPCSTR lpSaveFile, DWORD dwSkipStart, DWORD dwSk
 
         DWORD dwStartTime = GetTickCount();
         printf("正在初始化...");
-        AnalyzeM3u8File(lpM3u8Url);  // 分析M3U8文件  
+        AnalyzeM3u8File(lpM3u8Url, isFromHttp);  // 分析M3U8文件  
 
 
         for (i=0; i<MAX_DWONLOAD_THREAD; i++)
