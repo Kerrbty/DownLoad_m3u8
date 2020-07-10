@@ -1,16 +1,31 @@
 #include "DownLoadM3U8.h"
-#include "ReadOneLine.h"
-#include "List.h"
+#include <COneLine/COneLine.h>
+#include <list.h>
 #include "Log.h"
-#include "Http/HttpPost.h"
+#include <Http/Http.h>
 #include "DecryptBuf.h"
 #include "PV/lock.h"
 #include <stdio.h>
 #include <shlwapi.h>
 #pragma comment(lib, "shlwapi.lib")
+#ifdef _DEBUG
+#pragma comment(lib, "http_d.lib")
+#pragma comment(lib, "pv_d.lib")
+#pragma comment(lib, "COneLine_d.lib")
+#else
+#pragma comment(lib, "http.lib")
+#pragma comment(lib, "pv.lib")
+#pragma comment(lib, "COneLine.lib")
+#endif
+
 
 #define URL_LENTH   1024
+#ifdef _DEBUG 
+#define MAX_DWONLOAD_THREAD  1
+#else
 #define MAX_DWONLOAD_THREAD  18
+#endif
+
 
 enum ENCRYPT_TYPE{
     NOT_ENCRYPT = 0,
@@ -163,7 +178,32 @@ static DWORD WINAPI DownTsThread(LPVOID lParam)
             // 不略过下载的，需要正常下载 
             if(!bDownSuccess)
             {
-                pDwonOneList->pThisFileBuf = GetHttpDataA(pDwonOneList->chUrl, &pDwonOneList->dwFileSize);
+                CHttp TsData(pDwonOneList->chUrl);
+                TsData.SetAcceptA("*/*");
+                TsData.SetAcceptEncodingA("gzip, deflate, br");
+                TsData.SetAcceptLanguageA("zh-CN,zh;q=0.9,en;q=0.8");
+                TsData.SetUserAgentA("Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36");
+
+                DWORD dwDataLen = 0;
+                LPCSTR lpDataLen = TsData.GetDataLenthA();
+                pDwonOneList->pThisFileBuf = NULL;
+                if (lpDataLen)
+                {
+                    dwDataLen = strtoul(lpDataLen, NULL, 10);
+                }
+                else
+                {
+                    dwDataLen = 10*1024*1024;
+                }
+                pDwonOneList->pThisFileBuf = (LPBYTE)AllocMemory(dwDataLen);
+                pDwonOneList->dwFileSize = TsData.GetData(pDwonOneList->pThisFileBuf, dwDataLen, TRUE);
+                ASSERT_HEAP(pDwonOneList->pThisFileBuf);
+                if (pDwonOneList->dwFileSize == 0)
+                {
+                    FreeMemory(pDwonOneList->pThisFileBuf);
+                    pDwonOneList->pThisFileBuf = NULL;
+                }
+                
                 if (pDwonOneList->pThisFileBuf != NULL && pDwonOneList->dwFileSize != 0)
                 {
                     bDownSuccess = TRUE;
@@ -259,7 +299,21 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Uri, BOOL isURL = TRUE)
     LPBYTE lpM3u8File = NULL;
     if (isURL)
     {
-        lpM3u8File = GetHttpDataA(lpM3u8Uri, &dwM3u8Size);
+        CHttp m3u8(lpM3u8Uri);
+        m3u8.SetUserAgentA("Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36");
+        LPCSTR lpDataLen = m3u8.GetDataLenthA();
+        DWORD dwDataLen = 0;
+        if (lpDataLen)
+        {
+            dwDataLen = strtoul(lpDataLen, NULL, 0);
+        }
+        else
+        {
+            dwDataLen = 4*1024*1024;
+        }
+        lpM3u8File = (LPBYTE)AllocMemory(dwDataLen);
+        dwM3u8Size = m3u8.GetData(lpM3u8File, dwDataLen, TRUE);
+        ASSERT_HEAP(lpM3u8File);
     }
     else
     {
@@ -284,6 +338,7 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Uri, BOOL isURL = TRUE)
         dwUrlLen = URL_LENTH;
         while( m3u8.getLine(lpOneAddr, &dwUrlLen) )
         {
+            ASSERT_HEAP(lpOneAddr);
             int firstch = 0;
             while(lpOneAddr[firstch] == ' ' || lpOneAddr[firstch] == '\t')
             {
@@ -314,8 +369,32 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Uri, BOOL isURL = TRUE)
 //                             lpKeyURI[len-1] = '\0';
 //                         }
                         const char* lpNewUrl = GetFileUrl(lpDownAddress, lpM3u8Uri, lpKeyURI);
+                        ASSERT_HEAP(lpDownAddress);
 
-                        LPBYTE lpM3u8File = GetHttpDataA(lpNewUrl, &dwM3u8Size);
+                        CHttp subm3u8(lpNewUrl);
+                        subm3u8.SetUserAgentA("Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36");
+                        LPCSTR lpDataLen = subm3u8.GetDataLenthA();
+                        DWORD dwDataLen = 0;
+                        if (lpDataLen)
+                        {
+                            dwDataLen = strtoul(lpDataLen, NULL, 0);
+                        }
+                        else
+                        {
+                            dwDataLen = 4*1024*1024;
+                        }
+                        LPBYTE lpM3u8File = (LPBYTE)AllocMemory(dwDataLen);
+                        if (lpM3u8File)
+                        {
+                            dwDataLen = subm3u8.GetData(lpM3u8File, dwDataLen, TRUE);
+                            ASSERT_HEAP(lpM3u8File);
+                        }
+                        if (dwDataLen == 0)
+                        {
+                            FreeMemory(lpM3u8File);
+                            lpM3u8File = NULL;
+                        }
+
                         if (lpM3u8File != NULL)
                         {
                             lpM3U8Key = lpM3u8File;
@@ -338,11 +417,13 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Uri, BOOL isURL = TRUE)
 
                 // 加入列表进行下载 
                 PDownTsList plist = (PDownTsList)AllocMemory(sizeof(DownTsList));
+                ASSERT_HEAP(plist);
                 plist->nId = global_dwCountId++;
                 plist->nDecodeErrCount = 0;
                 plist->bEncrypt = bEncryptFlags;
                 plist->chUrl = (char*)AllocMemory(strlen(lpNewUrl)+1);
                 strcpy(plist->chUrl, lpNewUrl);
+                ASSERT_HEAP(plist->chUrl);
                 TsNeedDownListLock.lock();
                 _InsertTailList(&TsNeedDownList.next, &plist->next);
                 TsNeedDownListLock.unlock();
@@ -400,6 +481,8 @@ BOOL DownM3u8(LPCSTR lpM3u8Url, BOOL isFromHttp, LPCSTR lpSaveFile, DWORD dwSkip
             plist->nId = global_dwCountId++;
             plist->chUrl = (char*)AllocMemory(MAX_PATH);
             strcpy(plist->chUrl, "EndBlock");
+            ASSERT_HEAP(plist);
+            ASSERT_HEAP(plist->chUrl);
             TsNeedDownListLock.lock();
             _InsertTailList(&TsNeedDownList.next, &plist->next);
             TsNeedDownListLock.unlock();

@@ -44,7 +44,7 @@
 				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
-				RuntimeLibrary="3"
+				RuntimeLibrary="1"
 				UsePrecompiledHeader="0"
 				WarningLevel="3"
 				DebugInformationFormat="4"
@@ -115,7 +115,7 @@
 				Optimization="2"
 				EnableIntrinsicFunctions="true"
 				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE"
-				RuntimeLibrary="2"
+				RuntimeLibrary="0"
 				EnableFunctionLevelLinking="true"
 				UsePrecompiledHeader="0"
 				WarningLevel="3"
@@ -186,62 +186,6 @@
 				RelativePath=".\main.cpp"
 				>
 			</File>
-			<File
-				RelativePath=".\ReadOneLine.cpp"
-				>
-			</File>
-			<Filter
-				Name="Http"
-				>
-				<File
-					RelativePath=".\Http\AnalyzeURL.cpp"
-					>
-				</File>
-				<File
-					RelativePath=".\Http\AnalyzeURL.h"
-					>
-				</File>
-				<File
-					RelativePath=".\Http\HttpPost.cpp"
-					>
-				</File>
-				<File
-					RelativePath=".\Http\HttpPost.h"
-					>
-				</File>
-			</Filter>
-			<Filter
-				Name="StringFormat"
-				>
-				<File
-					RelativePath=".\StringFormat\StringFormt.cpp"
-					>
-				</File>
-				<File
-					RelativePath=".\StringFormat\StringFormt.h"
-					>
-				</File>
-			</Filter>
-			<Filter
-				Name="PV"
-				>
-				<File
-					RelativePath=".\PV\lock.cpp"
-					>
-				</File>
-				<File
-					RelativePath=".\PV\lock.h"
-					>
-				</File>
-				<File
-					RelativePath=".\PV\semaphore.cpp"
-					>
-				</File>
-				<File
-					RelativePath=".\PV\semaphore.h"
-					>
-				</File>
-			</Filter>
 		</Filter>
 		<Filter
 			Name="Í·ÎÄ¼þ"
@@ -257,15 +201,7 @@
 				>
 			</File>
 			<File
-				RelativePath=".\List.h"
-				>
-			</File>
-			<File
 				RelativePath=".\Log.h"
-				>
-			</File>
-			<File
-				RelativePath=".\ReadOneLine.h"
 				>
 			</File>
 		</Filter>

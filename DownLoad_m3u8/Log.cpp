@@ -29,6 +29,7 @@ static bool create_directoryW(const WCHAR* szpath)
             *p++ = *q++;
         }
         CreateDirectoryW(szdir, NULL);
+        ASSERT_HEAP(szdir);
         FreeMemory(szdir);
     }
     else
@@ -65,6 +66,7 @@ int logger(const char* Format, ...)
         create_directoryW(filename); 
         szlen = wcslen(filename);
         wsprintfW(filename+szlen, L"LogInfo-%04d%02d%02d-%02d%02d.log", SystemTime.wYear,  SystemTime.wMonth, SystemTime.wDay, SystemTime.wHour, SystemTime.wMinute);
+        ASSERT_HEAP(filename);
         LogFileLock.lock();
         if (file == NULL)
         {

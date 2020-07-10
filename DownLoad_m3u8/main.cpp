@@ -13,6 +13,7 @@ static LPCSTR GetSaveName()
     do 
     {
         wsprintfA(lpFileName+len, "\\temp%0d.ts", i);
+        ASSERT_HEAP(lpFileName);
         i++;
     } while (PathFileExistsA(lpFileName));
     return lpFileName;
@@ -102,7 +103,7 @@ int main(int argc, char* argv[], char* env[])
     }
 #else
 //     DownM3u8("http://cdn.luya9.com/ppvod/512DEC0E4B55C857E1FFE628B6CD0401.m3u8", "F:\\av.ts");
-    DownM3u8("C:\\Users\\Administrator\\Desktop\\index.m3u8", FALSE, "F:\\ÈýÇ§Ñ»É± 28.ts");
+    DownM3u8("https://www.mmicloud.com:65/20200710/oEMVtLLe/index.m3u8", TRUE, "F:\\ÈýÇ§Ñ»É± 28.ts");
 #endif
     return 0;
 }
