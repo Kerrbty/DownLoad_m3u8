@@ -180,7 +180,8 @@ static DWORD WINAPI DownTsThread(LPVOID lParam)
             {
                 CHttp TsData(pDwonOneList->chUrl);
                 TsData.SetAcceptA("*/*");
-                TsData.SetAcceptEncodingA("gzip, deflate, br");
+                TsData.SetAcceptEncodingA("gzip, deflate");
+                TsData.SetAutoUnzip(TRUE);
                 TsData.SetAcceptLanguageA("zh-CN,zh;q=0.9,en;q=0.8");
                 TsData.SetUserAgentA("Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36");
 
@@ -300,7 +301,10 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Uri, BOOL isURL = TRUE)
     if (isURL)
     {
         CHttp m3u8(lpM3u8Uri);
-        m3u8.SetUserAgentA("Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36");
+        m3u8.SetAcceptLanguageA("zh-CN");
+        m3u8.SetAcceptA("text/html, application/xhtml+xml, */*");
+        m3u8.SetAcceptEncodingA("gzip, deflate");
+        m3u8.SetAutoUnzip(TRUE);
         LPCSTR lpDataLen = m3u8.GetDataLenthA();
         DWORD dwDataLen = 0;
         if (lpDataLen)
@@ -372,7 +376,9 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Uri, BOOL isURL = TRUE)
                         ASSERT_HEAP(lpDownAddress);
 
                         CHttp subm3u8(lpNewUrl);
-                        subm3u8.SetUserAgentA("Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36");
+                        subm3u8.SetAcceptEncodingA("gzip, deflate");
+                        subm3u8.SetAutoUnzip(TRUE);
+                        subm3u8.SetUserAgentA("Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.89 Safari/537.36");
                         LPCSTR lpDataLen = subm3u8.GetDataLenthA();
                         DWORD dwDataLen = 0;
                         if (lpDataLen)
