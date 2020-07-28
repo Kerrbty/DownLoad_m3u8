@@ -413,7 +413,7 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Uri, BOOL isURL = TRUE)
             }
 
             LPCSTR lpFileExt = strchr(lpOneAddr, '.');
-            if (stricmp(lpFileExt, ".m3u8") == 0) // m3u8 
+            if (StrStrIA(lpFileExt, ".m3u8") != NULL) // m3u8 
             {
                 AnalyzeM3u8File(GetFileUrl(lpDownAddress, lpM3u8Uri, lpOneAddr+firstch), TRUE);
             }
