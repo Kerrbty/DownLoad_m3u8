@@ -60,6 +60,67 @@ static PBYTE lpM3U8Key = NULL;
 static DWORD global_skipStart = 0;
 static DWORD global_skipCount = 0;
 
+// 下载数据 
+static LPBYTE WINAPI HttpGetData(LPCSTR lpUrl, DWORD* dwDataSize)
+{
+    LPBYTE bRecvData = NULL;
+    if (dwDataSize)
+    {
+        *dwDataSize = 0;
+    }
+    
+    // 下载三次机会 
+    for (int i=0; i<3; i++)
+    {
+        // 设置请求头信息 
+        CHttp HttpData(lpUrl);
+        HttpData.SetAcceptA("*/*");
+        HttpData.SetAcceptEncodingA("gzip, deflate");
+        HttpData.SetAutoUnzip(TRUE);
+        HttpData.SetAcceptLanguageA("zh-CN,zh;q=0.9,en;q=0.8");
+        HttpData.SetUserAgentA("Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36");
+
+        // 获取数据大小 
+        DWORD dwAllocLen = 0;
+        LPCSTR lpDataLen = HttpData.GetDataLenthA();
+        if (lpDataLen)
+        {
+            dwAllocLen = strtoul(lpDataLen, NULL, 10);
+        }
+        if (dwAllocLen == 0)
+        {
+            dwAllocLen = 10*1024*1024;
+        }
+
+        // 申请内存，下载数据 
+        bRecvData = (LPBYTE)AllocMemory(dwAllocLen);
+        if (bRecvData)
+        {
+            DWORD dwRecvLen = HttpData.GetData(bRecvData, dwAllocLen, TRUE);
+            ASSERT_HEAP(bRecvData);
+            if (dwRecvLen > 0)
+            {
+                // 数据没那么大，重新调整内存 
+                if (dwRecvLen < dwAllocLen)
+                {
+                    bRecvData = (LPBYTE)ReAllocMemory(bRecvData, dwRecvLen);
+                    ASSERT_HEAP(bRecvData);
+                }
+                
+                // 成功获取到数据 
+                if (dwDataSize)
+                {
+                    *dwDataSize = dwRecvLen;
+                }
+                break;
+            }
+            FreeMemory(bRecvData);
+            bRecvData = NULL;
+        }
+    }
+    return bRecvData;
+}
+
 static DWORD WINAPI SaveTsThread(LPVOID lParam)
 {
     DWORD dwBytes = 0;
@@ -97,12 +158,12 @@ static DWORD WINAPI SaveTsThread(LPVOID lParam)
                 }
                 TsNeedSaveListLock.unlock();
 
-                printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b下载完成\t\t\t\n");
+                printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b下载完成\t\t\t\n");
                 ExitThread(0);
             }
 #pragma endregion Exit_FLags
 
-            printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b下载进度: %u/%u\t", dwSaveCurrentId+1, global_dwCountId>MAX_DWONLOAD_THREAD?global_dwCountId-MAX_DWONLOAD_THREAD:global_dwCountId);
+            printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b下载进度: %u/%u\t", dwSaveCurrentId+1, global_dwCountId>MAX_DWONLOAD_THREAD?global_dwCountId-MAX_DWONLOAD_THREAD:global_dwCountId);
             logger("Save Id: %u\n", dwSaveCurrentId);
             if (pInserList->pThisFileBuf != NULL && pInserList->dwFileSize>0)
             {
@@ -125,7 +186,6 @@ static DWORD WINAPI SaveTsThread(LPVOID lParam)
     }
     return 0;
 }
-
 
 static DWORD WINAPI DownTsThread(LPVOID lParam)
 {
@@ -178,33 +238,9 @@ static DWORD WINAPI DownTsThread(LPVOID lParam)
             // 不略过下载的，需要正常下载 
             if(!bDownSuccess)
             {
-                CHttp TsData(pDwonOneList->chUrl);
-                TsData.SetAcceptA("*/*");
-                TsData.SetAcceptEncodingA("gzip, deflate");
-                TsData.SetAutoUnzip(TRUE);
-                TsData.SetAcceptLanguageA("zh-CN,zh;q=0.9,en;q=0.8");
-                TsData.SetUserAgentA("Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/83.0.4103.116 Safari/537.36");
-
-                DWORD dwDataLen = 0;
-                LPCSTR lpDataLen = TsData.GetDataLenthA();
-                pDwonOneList->pThisFileBuf = NULL;
-                if (lpDataLen)
-                {
-                    dwDataLen = strtoul(lpDataLen, NULL, 10);
-                }
-                else
-                {
-                    dwDataLen = 10*1024*1024;
-                }
-                pDwonOneList->pThisFileBuf = (LPBYTE)AllocMemory(dwDataLen);
-                pDwonOneList->dwFileSize = TsData.GetData(pDwonOneList->pThisFileBuf, dwDataLen, TRUE);
+                pDwonOneList->pThisFileBuf = HttpGetData(pDwonOneList->chUrl, &pDwonOneList->dwFileSize);
                 ASSERT_HEAP(pDwonOneList->pThisFileBuf);
-                if (pDwonOneList->dwFileSize == 0)
-                {
-                    FreeMemory(pDwonOneList->pThisFileBuf);
-                    pDwonOneList->pThisFileBuf = NULL;
-                }
-                
+
                 if (pDwonOneList->pThisFileBuf != NULL && pDwonOneList->dwFileSize != 0)
                 {
                     bDownSuccess = TRUE;
@@ -219,7 +255,7 @@ static DWORD WINAPI DownTsThread(LPVOID lParam)
                                 if( !AESDecrypt(lpM3U8Key, &iv, pDwonOneList->pThisFileBuf, pDwonOneList->dwFileSize) )
                                 {
                                     pDwonOneList->nDecodeErrCount++;
-                                    logger("AES解密失败： %s\n", pDwonOneList->chUrl);
+                                    logger("AES解密失败(%u)： %s\n", pDwonOneList->nId , pDwonOneList->chUrl);
                                     bDownSuccess = FALSE;
                                     break;
                                 }
@@ -257,7 +293,7 @@ static DWORD WINAPI DownTsThread(LPVOID lParam)
                 {
                     FreeMemory(pDwonOneList->pThisFileBuf);
                 }
-                logger("下载失败： %s\n", pDwonOneList->chUrl);
+                logger("下载失败(%u)： %s\n", pDwonOneList->nId, pDwonOneList->chUrl);
                 TsNeedDownListLock.lock();
                 _InsertHeadList(&TsNeedDownList.next, &pDwonOneList->next);
                 TsNeedDownListLock.unlock();
@@ -268,7 +304,7 @@ static DWORD WINAPI DownTsThread(LPVOID lParam)
 }
 
 
-static const char* GetFileUrl(char* lpSaveAddr, LPCSTR host_url, char* sub_url)
+static const char* GetFileUrl(LPSTR lpSaveAddr, LPCSTR host_url, char* sub_url)
 {
     // downfile and analyze 
     if (memicmp(sub_url, "http://", 7) == 0 || memicmp(sub_url, "https://", 8) == 0)
@@ -300,23 +336,8 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Uri, BOOL isURL = TRUE)
     LPBYTE lpM3u8File = NULL;
     if (isURL)
     {
-        CHttp m3u8(lpM3u8Uri);
-        m3u8.SetAcceptLanguageA("zh-CN");
-        m3u8.SetAcceptA("text/html, application/xhtml+xml, */*");
-        m3u8.SetAcceptEncodingA("gzip, deflate");
-        m3u8.SetAutoUnzip(TRUE);
-        LPCSTR lpDataLen = m3u8.GetDataLenthA();
-        DWORD dwDataLen = 0;
-        if (lpDataLen)
-        {
-            dwDataLen = strtoul(lpDataLen, NULL, 0);
-        }
-        else
-        {
-            dwDataLen = 4*1024*1024;
-        }
-        lpM3u8File = (LPBYTE)AllocMemory(dwDataLen);
-        dwM3u8Size = m3u8.GetData(lpM3u8File, dwDataLen, TRUE);
+        dwM3u8Size= 0;
+        lpM3u8File = HttpGetData(lpM3u8Uri, &dwM3u8Size);
         ASSERT_HEAP(lpM3u8File);
     }
     else
@@ -329,6 +350,7 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Uri, BOOL isURL = TRUE)
             lpM3u8File = (LPBYTE)AllocMemory(dwM3u8Size+1);
             SetFilePointer(hFile, 0, NULL, FILE_BEGIN);
             ReadFile(hFile, lpM3u8File, dwM3u8Size, &dwBytes, NULL);
+            ASSERT_HEAP(lpM3u8File);
             DeleteHandle(hFile);
         }
     }
@@ -367,40 +389,13 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Uri, BOOL isURL = TRUE)
                         {
                             *lpEndURI++ = '\0';
                         }
-//                         int len = strlen(lpKeyURI);
-//                         if (len >0 && lpKeyURI[len-1] == '\"')
-//                         {
-//                             lpKeyURI[len-1] = '\0';
-//                         }
+
                         const char* lpNewUrl = GetFileUrl(lpDownAddress, lpM3u8Uri, lpKeyURI);
                         ASSERT_HEAP(lpDownAddress);
 
-                        CHttp subm3u8(lpNewUrl);
-                        subm3u8.SetAcceptEncodingA("gzip, deflate");
-                        subm3u8.SetAutoUnzip(TRUE);
-                        subm3u8.SetUserAgentA("Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/62.0.3202.89 Safari/537.36");
-                        LPCSTR lpDataLen = subm3u8.GetDataLenthA();
                         DWORD dwDataLen = 0;
-                        if (lpDataLen)
-                        {
-                            dwDataLen = strtoul(lpDataLen, NULL, 0);
-                        }
-                        else
-                        {
-                            dwDataLen = 4*1024*1024;
-                        }
-                        LPBYTE lpM3u8File = (LPBYTE)AllocMemory(dwDataLen);
-                        if (lpM3u8File)
-                        {
-                            dwDataLen = subm3u8.GetData(lpM3u8File, dwDataLen, TRUE);
-                            ASSERT_HEAP(lpM3u8File);
-                        }
-                        if (dwDataLen == 0)
-                        {
-                            FreeMemory(lpM3u8File);
-                            lpM3u8File = NULL;
-                        }
-
+                        LPBYTE lpM3u8File = HttpGetData(lpNewUrl, &dwDataLen);
+                        ASSERT_HEAP(lpM3u8File);
                         if (lpM3u8File != NULL)
                         {
                             lpM3U8Key = lpM3u8File;
@@ -413,26 +408,29 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Uri, BOOL isURL = TRUE)
             }
 
             LPCSTR lpFileExt = strchr(lpOneAddr, '.');
-            if (StrStrIA(lpFileExt, ".m3u8") != NULL) // m3u8 
+            if (lpFileExt)
             {
-                AnalyzeM3u8File(GetFileUrl(lpDownAddress, lpM3u8Uri, lpOneAddr+firstch), TRUE);
-            }
-            else if ( StrStrIA(lpFileExt, ".ts") != NULL || StrStrIA(lpFileExt, ".mp4") != NULL )  // 知乎里面ts文件带 auth_key= 的
-            {
-                const char* lpNewUrl = GetFileUrl(lpDownAddress, lpM3u8Uri, lpOneAddr+firstch);
+                if (StrStrIA(lpFileExt, ".m3u8") != NULL) // m3u8 
+                {
+                    AnalyzeM3u8File(GetFileUrl(lpDownAddress, lpM3u8Uri, lpOneAddr+firstch), TRUE);
+                }
+                else if ( StrStrIA(lpFileExt, ".ts") != NULL || StrStrIA(lpFileExt, ".mp4") != NULL )  // 知乎里面ts文件带 auth_key= 的
+                {
+                    const char* lpNewUrl = GetFileUrl(lpDownAddress, lpM3u8Uri, lpOneAddr+firstch);
 
-                // 加入列表进行下载 
-                PDownTsList plist = (PDownTsList)AllocMemory(sizeof(DownTsList));
-                ASSERT_HEAP(plist);
-                plist->nId = global_dwCountId++;
-                plist->nDecodeErrCount = 0;
-                plist->bEncrypt = bEncryptFlags;
-                plist->chUrl = (char*)AllocMemory(strlen(lpNewUrl)+1);
-                strcpy(plist->chUrl, lpNewUrl);
-                ASSERT_HEAP(plist->chUrl);
-                TsNeedDownListLock.lock();
-                _InsertTailList(&TsNeedDownList.next, &plist->next);
-                TsNeedDownListLock.unlock();
+                    // 加入列表进行下载 
+                    PDownTsList plist = (PDownTsList)AllocMemory(sizeof(DownTsList));
+                    ASSERT_HEAP(plist);
+                    plist->nId = global_dwCountId++;
+                    plist->nDecodeErrCount = 0;
+                    plist->bEncrypt = bEncryptFlags;
+                    plist->chUrl = (char*)AllocMemory(strlen(lpNewUrl)+1);
+                    strcpy(plist->chUrl, lpNewUrl);
+                    ASSERT_HEAP(plist->chUrl);
+                    TsNeedDownListLock.lock();
+                    _InsertTailList(&TsNeedDownList.next, &plist->next);
+                    TsNeedDownListLock.unlock();
+                }
             }
 
             dwUrlLen = URL_LENTH;
@@ -494,6 +492,7 @@ BOOL DownM3u8(LPCSTR lpM3u8Url, BOOL isFromHttp, LPCSTR lpSaveFile, DWORD dwSkip
             TsNeedDownListLock.unlock();
         }
 
+        printf("\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b正在下载...");
         // 等待结束 
         WaitForMultipleObjects(MAX_DWONLOAD_THREAD, hThread, TRUE, INFINITE);
         for (i=0; i<MAX_DWONLOAD_THREAD; i++)

@@ -14,7 +14,7 @@ static bool create_directoryW(const WCHAR* szpath)
 
     size_t len = wcslen(szpath);
     LPWSTR szdir = (LPWSTR)AllocMemory((len+1)*sizeof(WCHAR));
-    if (szdir != NULL)
+    if (szdir)
     {
         LPWSTR p = szdir;
         LPCWSTR q = szpath;

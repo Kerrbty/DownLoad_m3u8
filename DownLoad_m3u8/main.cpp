@@ -49,7 +49,7 @@ static void usage(const char* selfname)
 
 int main(int argc, char* argv[], char* env[])
 {
-#ifndef _DEBUG
+// #ifndef _DEBUG
     if (argc < 2)
     {
         usage(argv[0]);
@@ -101,9 +101,9 @@ int main(int argc, char* argv[], char* env[])
     {
         DownM3u8(lpM3u8Url, TRUE, lpSaveFile, lpSkipStart, lpSkipCount);
     }
-#else
-//     DownM3u8("http://cdn.luya9.com/ppvod/512DEC0E4B55C857E1FFE628B6CD0401.m3u8", "F:\\av.ts");
-    DownM3u8("https://www.mmicloud.com:65/20200710/oEMVtLLe/index.m3u8", TRUE, "F:\\ÈýÇ§Ñ»É± 28.ts");
-#endif
+// #else
+// //     DownM3u8("http://cdn.luya9.com/ppvod/512DEC0E4B55C857E1FFE628B6CD0401.m3u8", "F:\\av.ts");
+//     DownM3u8("https://1258712167.vod2.myqcloud.com/fb8e6c92vodtranscq1258712167/4ed616595285890795616266537/drm/voddrm.token.dWluPTE0NDExNTE5OTczMjQ2NzcxODt2b2RfdHlwZT0wO2NpZD00MzM3MjM7dGVybV9pZD0xMDA1MTc4NzY7ZXh0PTQxMjA5MWEyNGI3NzFjOWJiOTA1ZjIwNThiYzYwMjEwMzk2MjliNzVmMjkyZDJlNjJkZTNhNzY4OGIzOWE0YTYyMjNmZWM5NGYzMjU0Y2MxYjIzNzBjNDQwMGUyZTE1MzU2ZDQ4MzRlMWM3YmZlMGFmZDEyMTQ0YjIwZDk2MzE3MjgwOGVhOTE3M2QyYjY0Mw==.master_playlist.m3u8?t=5f47b5eb&exper=0&us=6988902451072831491&sign=f8a35c48b85bb495ed96e9f6c406bd89", TRUE, "F:\\ÈýÇ§Ñ»É± 28.ts");
+// #endif
     return 0;
 }
