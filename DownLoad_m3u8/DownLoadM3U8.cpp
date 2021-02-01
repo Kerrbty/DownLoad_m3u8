@@ -89,7 +89,7 @@ static LPBYTE WINAPI HttpGetData(LPCSTR lpUrl, DWORD* dwDataSize)
         }
         if (dwAllocLen == 0)
         {
-            dwAllocLen = 10*1024*1024;
+            dwAllocLen = 8*1024*1024;
         }
 
         // 申请内存，下载数据 
@@ -360,6 +360,8 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Uri, BOOL isURL = TRUE)
         LPSTR lpDownAddress = (LPSTR)AllocMemory(URL_LENTH*2);
         LPSTR lpOneAddr = (LPSTR)AllocMemory(URL_LENTH);
         CReadLine m3u8(lpM3u8File, dwM3u8Size, FALSE);
+        BOOL bM3U8File = FALSE;    // 文件中是下一个m3u8文件 
+        BOOL bTsFile = FALSE; // 分片视频文件 
 
         dwUrlLen = URL_LENTH;
         while( m3u8.getLine(lpOneAddr, &dwUrlLen) )
@@ -372,67 +374,82 @@ static BOOL AnalyzeM3u8File(LPCSTR lpM3u8Uri, BOOL isURL = TRUE)
             }
             if (lpOneAddr[firstch] == '#')
             {
+                firstch++;
                 // 有可能有加密的哦 
-                if ( StrStrIA(lpOneAddr, "EXT-X-KEY") != NULL && StrStrIA(lpOneAddr, "AES-128") != NULL ) // 加密 
+                if ( memcmp(lpOneAddr+firstch, "EXT-X-KEY:", 9) == 0 ) // 加密 
                 {  
-                    EncryptType = ENCRYPT_AES128;
-                    char* lpKeyURI = StrStrIA(lpOneAddr, "URI=\"");
-                    if (lpKeyURI != NULL)
+                    // AES-128 加密 
+                    if (StrStrIA(lpOneAddr, "AES-128") != NULL)
                     {
-                        lpKeyURI = lpKeyURI+4;
-                        if (lpKeyURI[0] == '\"')
+                        EncryptType = ENCRYPT_AES128;
+                        char* lpKeyURI = StrStrIA(lpOneAddr, "URI=\"");
+                        if (lpKeyURI != NULL)
                         {
-                            lpKeyURI++;
-                        }
-                        char* lpEndURI = StrStrIA(lpKeyURI, "\"");
-                        if (lpEndURI != NULL)
-                        {
-                            *lpEndURI++ = '\0';
-                        }
+                            lpKeyURI = lpKeyURI+4;
+                            if (lpKeyURI[0] == '\"')
+                            {
+                                lpKeyURI++;
+                            }
+                            char* lpEndURI = StrStrIA(lpKeyURI, "\"");
+                            if (lpEndURI != NULL)
+                            {
+                                *lpEndURI++ = '\0';
+                            }
 
-                        const char* lpNewUrl = GetFileUrl(lpDownAddress, lpM3u8Uri, lpKeyURI);
-                        ASSERT_HEAP(lpDownAddress);
+                            const char* lpNewUrl = GetFileUrl(lpDownAddress, lpM3u8Uri, lpKeyURI);
+                            ASSERT_HEAP(lpDownAddress);
 
-                        DWORD dwDataLen = 0;
-                        LPBYTE lpM3u8File = HttpGetData(lpNewUrl, &dwDataLen);
-                        ASSERT_HEAP(lpM3u8File);
-                        if (lpM3u8File != NULL)
-                        {
-                            lpM3U8Key = lpM3u8File;
-                            bEncryptFlags = TRUE;
+                            DWORD dwDataLen = 0;
+                            LPBYTE lpM3u8File = HttpGetData(lpNewUrl, &dwDataLen);
+                            ASSERT_HEAP(lpM3u8File);
+                            if (lpM3u8File != NULL)
+                            {
+                                BYTE iv = 128;
+                                lpM3U8Key = lpM3u8File;
+                                AESDecrypt(lpM3U8Key, &iv, NULL, 0);
+                                bEncryptFlags = TRUE;
+                            }
                         }
                     }
+                }
+                else if (memcmp(lpOneAddr+firstch, "EXT-X-STREAM-INF:", 16) == 0)
+                {
+                    bM3U8File = TRUE;
+                    bTsFile = FALSE;
+                }
+                else if (memcmp(lpOneAddr+firstch, "EXTINF:", 6) == 0)
+                {
+                    bM3U8File = FALSE;
+                    bTsFile = TRUE;
                 }
                 dwUrlLen = URL_LENTH; 
                 continue; // 注释的行 
             }
 
-            LPCSTR lpFileExt = strchr(lpOneAddr, '.');
-            if (lpFileExt)
+            // 需要下载的文件 
+            if (bM3U8File)
             {
-                if (StrStrIA(lpFileExt, ".m3u8") != NULL) // m3u8 
-                {
-                    AnalyzeM3u8File(GetFileUrl(lpDownAddress, lpM3u8Uri, lpOneAddr+firstch), TRUE);
-                }
-                else if ( StrStrIA(lpFileExt, ".ts") != NULL || StrStrIA(lpFileExt, ".mp4") != NULL )  // 知乎里面ts文件带 auth_key= 的
-                {
-                    const char* lpNewUrl = GetFileUrl(lpDownAddress, lpM3u8Uri, lpOneAddr+firstch);
-
-                    // 加入列表进行下载 
-                    PDownTsList plist = (PDownTsList)AllocMemory(sizeof(DownTsList));
-                    ASSERT_HEAP(plist);
-                    plist->nId = global_dwCountId++;
-                    plist->nDecodeErrCount = 0;
-                    plist->bEncrypt = bEncryptFlags;
-                    plist->chUrl = (char*)AllocMemory(strlen(lpNewUrl)+1);
-                    strcpy(plist->chUrl, lpNewUrl);
-                    ASSERT_HEAP(plist->chUrl);
-                    TsNeedDownListLock.lock();
-                    _InsertTailList(&TsNeedDownList.next, &plist->next);
-                    TsNeedDownListLock.unlock();
-                }
+                AnalyzeM3u8File(GetFileUrl(lpDownAddress, lpM3u8Uri, lpOneAddr+firstch), TRUE);
+                bM3U8File = FALSE;
             }
+            else if (bTsFile)
+            {
+                const char* lpNewUrl = GetFileUrl(lpDownAddress, lpM3u8Uri, lpOneAddr+firstch);
 
+                // 加入列表进行下载 
+                PDownTsList plist = (PDownTsList)AllocMemory(sizeof(DownTsList));
+                ASSERT_HEAP(plist);
+                plist->nId = global_dwCountId++;
+                plist->nDecodeErrCount = 0;
+                plist->bEncrypt = bEncryptFlags;
+                plist->chUrl = (char*)AllocMemory(strlen(lpNewUrl)+1);
+                strcpy(plist->chUrl, lpNewUrl);
+                ASSERT_HEAP(plist->chUrl);
+                TsNeedDownListLock.lock();
+                _InsertTailList(&TsNeedDownList.next, &plist->next);
+                TsNeedDownListLock.unlock();
+                bTsFile = FALSE;
+            }
             dwUrlLen = URL_LENTH;
         }
 
